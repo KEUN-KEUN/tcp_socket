@@ -47,3 +47,43 @@
   "status": "received",
   "message": "START 명령 수신됨"
 }
+
+
+# 🧪 주요 기능 및 로그 예시
+
+연결 수립:
+  [ClientHandler] 연결 수립됨: /127.0.0.1:54321
+  ✅ 장비 등록됨: EQ001
+
+메시지 수신:
+  📩 수신 [EQ001]: {...}
+  [START][EQ001]: {...}
+
+응답 송신:
+  📤 송신 [EQ001]: {"type":"startAck",...}
+
+연결 종료:
+  🔌 연결 종료됨: EQ001
+
+
+# 🛠 개선 방향 제안
+
+✅ 기능적 개선
+  Heartbeat / Ping 메시지 처리
+  장비 생존 여부 판단을 위한 주기적 ping-pong 구조 도입.
+  MessageRouter 클래스 도입
+  handleMessage() 분기를 CommandRouter 등으로 위임해 SRP 원칙 강화.
+  장비 상태 캐싱
+  STATUS 메시지 처리 시 장비 상태를 메모리에 캐싱하거나 Redis 연동.
+  메시지 유효성 검증 및 예외 처리 강화
+  필드 누락, 잘못된 type 등 JSON Validation 도입.
+
+✅ 구조 및 운영 개선
+  비동기 로그 처리 도입 (예: Logback AsyncAppender)
+  고속 처리 환경에서 I/O 병목 방지.
+  Socket 연결 유지 기반 모드 지원
+  클라이언트가 장시간 연결 유지하며 명령 수신하도록 변경 옵션 제공.
+  TLS 통신 및 인증 체계 도입
+  민감 통신 환경이라면 TLS 및 HMAC 인증 등 강화.
+  모니터링/메트릭 통합
+  Prometheus exporter 연동 또는 Log/Alert 시스템 통합.
