@@ -5,93 +5,141 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
-public class ClientHandler extends Thread {
+public class ClientHandler implements Runnable {
 
     private final Socket socket;
-    private final String equipmentId;
-    private PrintWriter out;
+    private final EquipmentSocketServer server;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private BufferedReader reader;
+    private PrintWriter writer;
 
-    public ClientHandler(Socket socket, String equipmentId) {
+    private String equipmentId;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public ClientHandler(Socket socket, EquipmentSocketServer server) throws IOException {
         this.socket = socket;
-        this.equipmentId = equipmentId;
+        this.server = server;
+
+        this.reader = new BufferedReader(
+                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+        this.writer = new PrintWriter(
+                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
     }
 
     @Override
     public void run() {
-        System.out.println("🟢 [" + equipmentId + "] 연결됨");
+        System.out.println(" [ClientHandler] 연결 수립됨: " + socket.getRemoteSocketAddress());
 
-        try (
-            BufferedReader in = new BufferedReader(
-                new InputStreamReader(socket.getInputStream(), "UTF-8"));
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)
-        ) {
-            this.out = writer;
-            String line;
-
-            while ((line = in.readLine()) != null) {
-                logReceived(line);
-                handleMessage(line);
-            }
-
-        } catch (IOException e) {
-            System.err.println("❌ [" + equipmentId + "] 통신 오류: " + e.getMessage());
-        } finally {
-            cleanup();
-        }
-    }
-
-    /**
-     * 클라이언트로부터 받은 메시지를 로그 출력
-     */
-    private void logReceived(String message) {
-        System.out.println("📩 수신 [" + equipmentId + "]: " + message);
-    }
-
-    /**
-     * 수신된 메시지를 파싱하고 처리 로직 분기
-     */
-    private void handleMessage(String message) {
         try {
-            JsonNode root = objectMapper.readTree(message);
-            JsonNode header = root.path("header");
-            String command = header.path("command").asText(null);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("📩 수신 [" + label() + "]: " + line);
 
-            if (command != null) {
-                System.out.println("🔍 명령어: " + command);
-                // MessageRouter.route(root, this); // 추후 연결 지점
-            } else {
-                System.out.println("⚠ command 필드 없음");
+                JsonNode json = objectMapper.readTree(line);
+                handleMessage(json);
             }
-
-        } catch (Exception e) {
-            System.err.println("⚠ JSON 파싱 실패: " + e.getMessage());
+        } catch (IOException e) {
+            System.err.println("❌ [ClientHandler] 통신 오류 (" + label() + "): " + e.getMessage());
+        } finally {
+        	cleanup();
         }
     }
 
+    private void handleMessage(JsonNode msg) {
+        JsonNode header = msg.path("header");
+        String type = header.path("type").asText(null);
+
+        if (equipmentId == null && msg.has("equipmentId")) {
+            equipmentId = msg.get("equipmentId").asText();
+            server.registerHandler(equipmentId, this);
+            System.out.println("✅ 장비 등록됨: " + equipmentId);
+        }
+
+        switch (type) {
+        	case "START":
+        		handleStart(msg);
+        		break;
+        	case "STATUS":
+                handleStatus(msg);
+                break;
+            case "ALARM":
+                handleAlarm(msg);
+                break;
+            case "COMMANDRESPONSE":
+                handleCommandResponse(msg);
+                break;
+            default:
+                System.err.println(" [ClientHandler] 알 수 없는 type (" + label() + "): " + type);
+        }
+    }
+
+    private void handleStart(JsonNode msg) {
+        System.out.println(" [START][" + label() + "]: " + msg.toString());
+
+        // 예시: 서버에서 응답 메시지 전송
+        String response = String.format(
+            "{\"type\":\"startAck\",\"equipmentId\":\"%s\",\"status\":\"received\",\"message\":\"START 명령 수신됨\"}",
+            equipmentId);
+        
+        send(response);
+    }
+    
+    private void handleStatus(JsonNode msg) {
+        System.out.println(" [Status][" + label() + "]: " + msg.toString());
+    }
+
+    private void handleAlarm(JsonNode msg) {
+        System.out.println(" [Alarm][" + label() + "]: " + msg.toString());
+    }
+
+    private void handleCommandResponse(JsonNode msg) {
+        System.out.println(" [CommandResponse][" + label() + "]: " + msg.toString());
+    }
+
     /**
-     * 서버에서 클라이언트로 메시지 전송
+     * 서버 → 장비 메시지 전송
      */
     public void send(String message) {
-        if (out != null) {
-            out.println(message);
-            System.out.println("📤 송신 [" + equipmentId + "]: " + message);
+        if (writer != null) {
+            try {
+                writer.println(message);
+                writer.flush(); // 안전하게 보냄
+                System.out.println(" 송신 [" + label() + "]: " + message);
+                
+                // 응답 전송 후 약간의 시간 대기 (클라이언트 수신 완료 보장용)
+                try {
+                    Thread.sleep(200); // 200ms 대기
+                } catch (InterruptedException ignore) {}
+                
+            } catch (Exception e) {
+                System.err.println(" [송신 실패][" + label() + "]: " + e.getMessage());
+            }
         } else {
-            System.err.println("⚠ 송신 실패 (out=null)");
+            System.err.println(" [송신 실패][" + label() + "]: writer가 null입니다.");
         }
     }
 
+
     /**
-     * 소켓 종료 처리
+     * 연결 종료 및 리소스 해제
      */
     private void cleanup() {
+        if (equipmentId != null) {
+            server.unregisterHandler(equipmentId);
+        }
         try {
-            if (!socket.isClosed()) {
-                socket.close();
-            }
+            socket.close();
         } catch (IOException ignore) {}
-        System.out.println("🔌 연결 종료 [" + equipmentId + "]");
+        System.out.println(" 연결 종료됨: " + label());
+    }
+
+    /**
+     * 장비 ID 또는 소켓 주소 표시용
+     */
+    private String label() {
+        return (equipmentId != null) ? equipmentId : socket.getRemoteSocketAddress().toString();
     }
 }
+

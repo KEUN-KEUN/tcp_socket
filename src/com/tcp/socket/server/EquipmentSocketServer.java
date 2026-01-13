@@ -44,6 +44,7 @@ public class EquipmentSocketServer {
         while (running) {
             try {
                 Socket socket = serverSocket.accept(); // blocking
+                ClientHandler handler = new ClientHandler(socket, this);
                 threadPool.submit(handler);
             } catch (IOException e) {
                 if (running) {
