@@ -62,7 +62,7 @@ public class EquipmentSocketServer {
      */
     public void registerHandler(String equipmentId, ClientHandler handler) {
         clientMap.put(equipmentId, handler);
-        System.out.println("[SocketServer] 장비 등록됨: " + equipmentId);
+        System.out.println(" [SocketServer] 장비 등록됨: " + equipmentId);
     }
 
     /**
@@ -70,7 +70,7 @@ public class EquipmentSocketServer {
      */
     public void unregisterHandler(String equipmentId) {
         clientMap.remove(equipmentId);
-        System.out.println("[SocketServer] 장비 해제됨: " + equipmentId);
+        System.out.println(" [SocketServer] 장비 해제됨: " + equipmentId);
     }
 
     /**
@@ -82,7 +82,7 @@ public class EquipmentSocketServer {
             handler.send(commandJson.toString());
             return true;
         } else {
-            System.err.println("[SocketServer] 장비 없음: " + equipmentId);
+            System.err.println(" [SocketServer] 장비 없음: " + equipmentId);
             return false;
         }
     }
@@ -105,7 +105,7 @@ public class EquipmentSocketServer {
         if (threadPool != null && !threadPool.isShutdown()) {
             threadPool.shutdownNow();
         }
-        System.out.println("[SocketServer] 서버 종료 완료");
+        System.out.println(" [SocketServer] 서버 종료 완료");
     }
 }
 

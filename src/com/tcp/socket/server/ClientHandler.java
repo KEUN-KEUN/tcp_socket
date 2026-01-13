@@ -35,13 +35,13 @@ public class ClientHandler implements Runnable {
         try {
             String line;
             while ((line = reader.readLine()) != null) {
-                System.out.println("📩 수신 [" + label() + "]: " + line);
+                System.out.println(" 수신 [" + label() + "]: " + line);
 
                 JsonNode json = objectMapper.readTree(line);
                 handleMessage(json);
             }
         } catch (IOException e) {
-            System.err.println("❌ [ClientHandler] 통신 오류 (" + label() + "): " + e.getMessage());
+            System.err.println(" [ClientHandler] 통신 오류 (" + label() + "): " + e.getMessage());
         } finally {
         	cleanup();
         }
